@@ -23,6 +23,9 @@ CDP_PORT=18800
 if [ -x "$CHROME_BIN" ]; then
   mkdir -p "$CHROME_DATA"
 
+  # Remove stale lock files left by a previous container on the persistent volume
+  rm -f "$CHROME_DATA/SingletonLock" "$CHROME_DATA/SingletonSocket" "$CHROME_DATA/SingletonCookie"
+
   "$CHROME_BIN" \
     --headless \
     --no-sandbox \
