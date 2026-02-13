@@ -43,7 +43,7 @@ ENV NODE_ENV=production
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
-    # Playwright/Chromium dependencies
+    curl \
     libnss3 \
     libatk1.0-0 \
     libatk-bridge2.0-0 \
@@ -78,12 +78,6 @@ COPY --from=openclaw-build /openclaw /openclaw
 # Provide an openclaw executable
 RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /openclaw/dist/entry.js "$@"' > /usr/local/bin/openclaw \
   && chmod +x /usr/local/bin/openclaw
-
-# Chromium wrapper: adds --disable-dev-shm-usage for containers with small /dev/shm
-RUN printf '%s\n' '#!/usr/bin/env bash' \
-  'exec /root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome --disable-dev-shm-usage --disable-gpu "$@"' \
-  > /usr/local/bin/chromium-wrapper \
-  && chmod +x /usr/local/bin/chromium-wrapper
 
 COPY src ./src
 COPY entrypoint.sh ./
