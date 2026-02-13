@@ -79,6 +79,12 @@ COPY --from=openclaw-build /openclaw /openclaw
 RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /openclaw/dist/entry.js "$@"' > /usr/local/bin/openclaw \
   && chmod +x /usr/local/bin/openclaw
 
+# Chromium wrapper: adds --disable-dev-shm-usage for containers with small /dev/shm
+RUN printf '%s\n' '#!/usr/bin/env bash' \
+  'exec /root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome --disable-dev-shm-usage --disable-gpu "$@"' \
+  > /usr/local/bin/chromium-wrapper \
+  && chmod +x /usr/local/bin/chromium-wrapper
+
 COPY src ./src
 
 ENV PORT=8080
