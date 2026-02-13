@@ -1,39 +1,91 @@
-FROM node:20-bookworm
+# Build OpenClaw from source
+FROM node:22-bookworm AS openclaw-build
 
-# Install dependencies needed for Homebrew
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    procps \
-    curl \
-    file \
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    curl \
+    python3 \
+    make \
+    g++ \
+  && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user for Homebrew (Homebrew refuses to run as root)
-RUN useradd -m -s /bin/bash linuxbrew
-RUN mkdir -p /home/linuxbrew/.linuxbrew && chown -R linuxbrew:linuxbrew /home/linuxbrew/.linuxbrew
+# Install Bun (OpenClaw build uses it)
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
 
-# Install Homebrew as linuxbrew user
-USER linuxbrew
-RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+RUN corepack enable
 
-# Switch back to root to set up paths and app
-USER root
+WORKDIR /openclaw
 
-# Add Homebrew to PATH for all users
-ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
-ENV HOMEBREW_NO_AUTO_UPDATE=1
+# Pin to a known-good release tag.
+# Update this to pull a newer version of OpenClaw.
+ARG OPENCLAW_GIT_REF=v2026.2.9
+RUN git clone --depth 1 --branch "${OPENCLAW_GIT_REF}" https://github.com/openclaw/openclaw.git .
 
-# Create app directory
+# Relax version constraints that may reference unpublished packages
+RUN set -eux; \
+  find ./extensions -name 'package.json' -type f | while read -r f; do \
+    sed -i -E 's/"openclaw"[[:space:]]*:[[:space:]]*">=[^"]+"/"openclaw": "*"/g' "$f"; \
+    sed -i -E 's/"openclaw"[[:space:]]*:[[:space:]]*"workspace:[^"]+"/"openclaw": "*"/g' "$f"; \
+  done
+
+RUN pnpm install --no-frozen-lockfile
+RUN pnpm build
+RUN pnpm ui:install && pnpm ui:build
+
+
+# Runtime image
+FROM node:22-bookworm
+ENV NODE_ENV=production
+
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ca-certificates \
+    # Playwright/Chromium dependencies
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    libatspi2.0-0 \
+    libxshmfence1 \
+    fonts-liberation \
+    xvfb \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install Playwright Chromium
+RUN npx playwright install chromium
+
 WORKDIR /app
 
-# Copy package files and install dependencies
-COPY package*.json ./
-RUN npm install
+# Wrapper deps
+COPY package.json ./
+RUN npm install --omit=dev && npm cache clean --force
 
-# Copy the rest of the app
-COPY . .
+# Copy built OpenClaw
+COPY --from=openclaw-build /openclaw /openclaw
 
+# Provide an openclaw executable
+RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /openclaw/dist/entry.js "$@"' > /usr/local/bin/openclaw \
+  && chmod +x /usr/local/bin/openclaw
+
+COPY src ./src
+
+ENV PORT=8080
+ENV OPENCLAW_ENTRY=/openclaw/dist/entry.js
 EXPOSE 8080
 
-CMD ["npm", "start"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
+  CMD curl -f http://localhost:8080/setup/healthz || exit 1
+
+CMD ["node", "src/server.js"]
