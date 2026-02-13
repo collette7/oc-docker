@@ -86,12 +86,18 @@ RUN printf '%s\n' '#!/usr/bin/env bash' \
   && chmod +x /usr/local/bin/chromium-wrapper
 
 COPY src ./src
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
 
 ENV PORT=8080
 ENV OPENCLAW_ENTRY=/openclaw/dist/entry.js
+# Remote CDP mode: OpenClaw connects to our self-managed Chrome instead of
+# using the built-in browser control service (which doesn't bind reliably in containers).
+ENV BROWSER_CDP_URL=http://127.0.0.1:9222
+ENV BROWSER_EVALUATE_ENABLED=true
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
   CMD curl -f http://localhost:8080/setup/healthz || exit 1
 
-CMD ["node", "src/server.js"]
+CMD ["./entrypoint.sh"]
