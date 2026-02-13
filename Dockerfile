@@ -21,7 +21,7 @@ WORKDIR /openclaw
 
 # Pin to a known-good release tag.
 # Update this to pull a newer version of OpenClaw.
-ARG OPENCLAW_GIT_REF=v2026.2.9
+ARG OPENCLAW_GIT_REF=v2026.2.12
 RUN git clone --depth 1 --branch "${OPENCLAW_GIT_REF}" https://github.com/openclaw/openclaw.git .
 
 # Relax version constraints that may reference unpublished packages
