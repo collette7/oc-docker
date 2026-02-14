@@ -14,7 +14,7 @@ echo "[entrypoint] Xvfb started on DISPLAY=:99"
 #
 #    OpenClaw's managed launch has a hardcoded 15 s timeout that is too tight
 #    for Railway's resource-constrained containers.  By starting Chrome here
-#    we give it unlimited time and use the stable old headless mode.
+#    we give it unlimited time with matching flags (--headless=new).
 # ---------------------------------------------------------------------------
 CHROME_BIN="/root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome"
 CHROME_DATA="/data/.clawdbot/browser/openclaw/user-data"
@@ -27,7 +27,7 @@ if [ -x "$CHROME_BIN" ]; then
   rm -f "$CHROME_DATA/SingletonLock" "$CHROME_DATA/SingletonSocket" "$CHROME_DATA/SingletonCookie"
 
   "$CHROME_BIN" \
-    --headless \
+    --headless=new \
     --no-sandbox \
     --disable-setuid-sandbox \
     --disable-dev-shm-usage \
@@ -35,10 +35,15 @@ if [ -x "$CHROME_BIN" ]; then
     --disable-background-networking \
     --disable-sync \
     --disable-component-update \
+    --disable-features=Translate,MediaRouter \
+    --disable-session-crashed-bubble \
+    --hide-crash-restore-bubble \
+    --disable-blink-features=AutomationControlled \
     --no-first-run \
     --no-default-browser-check \
     --password-store=basic \
     --remote-debugging-port="$CDP_PORT" \
+    --remote-allow-origins=* \
     --user-data-dir="$CHROME_DATA" \
     about:blank &
 
