@@ -20,12 +20,8 @@ CHROME_BIN="/root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome"
 CHROME_DATA="/data/.clawdbot/browser/openclaw/user-data"
 CDP_PORT=18800
 
-if [ -x "$CHROME_BIN" ]; then
-  mkdir -p "$CHROME_DATA"
-
-  # Remove stale lock files left by a previous container on the persistent volume
+launch_chrome() {
   rm -f "$CHROME_DATA/SingletonLock" "$CHROME_DATA/SingletonSocket" "$CHROME_DATA/SingletonCookie"
-
   "$CHROME_BIN" \
     --headless=new \
     --no-sandbox \
@@ -46,11 +42,14 @@ if [ -x "$CHROME_BIN" ]; then
     --remote-allow-origins=* \
     --user-data-dir="$CHROME_DATA" \
     about:blank &
-
   CHROME_PID=$!
+}
+
+if [ -x "$CHROME_BIN" ]; then
+  mkdir -p "$CHROME_DATA"
+  launch_chrome
   echo "[entrypoint] Chrome launched (pid $CHROME_PID), waiting for CDP on port $CDP_PORT…"
 
-  # Poll until Chrome's CDP endpoint responds (up to 60 s)
   READY=0
   for i in $(seq 1 120); do
     if curl -sf "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null 2>&1; then
@@ -64,6 +63,16 @@ if [ -x "$CHROME_BIN" ]; then
   if [ "$READY" -eq 0 ]; then
     echo "[entrypoint] WARNING: Chrome CDP did not become ready in 60 s — continuing anyway"
   fi
+
+  # Watchdog: restart Chrome if it crashes (check every 10s)
+  (while true; do
+    sleep 10
+    if ! kill -0 "$CHROME_PID" 2>/dev/null; then
+      echo "[watchdog] Chrome (pid $CHROME_PID) died — restarting"
+      launch_chrome
+      echo "[watchdog] Chrome relaunched (pid $CHROME_PID)"
+    fi
+  done) &
 else
   echo "[entrypoint] WARNING: Chrome binary not found at $CHROME_BIN — skipping pre-launch"
 fi
